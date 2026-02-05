@@ -31,6 +31,7 @@ if (missing.length > 0) {
 
 const srcDir = path.join(__dirname, 'src');
 const distDir = path.join(__dirname, 'dist');
+const assetsDir = path.join(__dirname, 'assets');
 
 if (!fs.existsSync(distDir)) {
   fs.mkdirSync(distDir, { recursive: true });
@@ -51,5 +52,10 @@ fs.copyFileSync(
   path.join(srcDir, 'station.json'),
   path.join(distDir, 'station.json')
 );
+
+// Copy assets (icons)
+if (fs.existsSync(assetsDir)) {
+  fs.cpSync(assetsDir, path.join(distDir, 'assets'), { recursive: true });
+}
 
 console.log('Build complete. Output in dist/');

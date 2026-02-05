@@ -8,8 +8,24 @@
 4. Copy and paste the contents of `supabase-setup.sql`
 5. Click **Run** to execute the SQL
 
+If you already created the tables, run this migration instead:
+
+```sql
+ALTER TABLE stations
+ADD COLUMN IF NOT EXISTS total_chargers INTEGER NOT NULL DEFAULT 1;
+
+DROP POLICY IF EXISTS "Public can delete stations" ON stations;
+DROP POLICY IF EXISTS "Public can delete chargers" ON chargers;
+
+CREATE POLICY "Public can delete stations" ON stations
+  FOR DELETE USING (true);
+
+CREATE POLICY "Public can delete chargers" ON chargers
+  FOR DELETE USING (true);
+```
+
 This creates:
-- `stations` table (id, name, lat, lng, timestamps)
+- `stations` table (id, name, lat, lng, total_chargers, timestamps)
 - `chargers` table (id, station_id, charger_index, vendor, serial_number, model_number, mac_address, images[], timestamps)
 - Row Level Security (RLS) policies (public read/write for now)
 - Storage policies for `charger-image` uploads

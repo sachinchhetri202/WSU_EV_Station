@@ -5,9 +5,11 @@
 DROP POLICY IF EXISTS "Public can read stations" ON stations;
 DROP POLICY IF EXISTS "Public can insert stations" ON stations;
 DROP POLICY IF EXISTS "Public can update stations" ON stations;
+DROP POLICY IF EXISTS "Public can delete stations" ON stations;
 DROP POLICY IF EXISTS "Public can read chargers" ON chargers;
 DROP POLICY IF EXISTS "Public can insert chargers" ON chargers;
 DROP POLICY IF EXISTS "Public can update chargers" ON chargers;
+DROP POLICY IF EXISTS "Public can delete chargers" ON chargers;
 DROP POLICY IF EXISTS "Public can view charger images" ON storage.objects;
 DROP POLICY IF EXISTS "Public can upload charger images" ON storage.objects;
 DROP POLICY IF EXISTS "Service role can manage stations" ON stations;
@@ -22,6 +24,7 @@ CREATE TABLE IF NOT EXISTS stations (
   name TEXT NOT NULL,
   lat DOUBLE PRECISION NOT NULL,
   lng DOUBLE PRECISION NOT NULL,
+  total_chargers INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -56,6 +59,9 @@ CREATE POLICY "Public can insert stations" ON stations
 CREATE POLICY "Public can update stations" ON stations
   FOR UPDATE USING (true) WITH CHECK (true);
 
+CREATE POLICY "Public can delete stations" ON stations
+  FOR DELETE USING (true);
+
 -- Public read access for chargers
 CREATE POLICY "Public can read chargers" ON chargers
   FOR SELECT USING (true);
@@ -66,6 +72,9 @@ CREATE POLICY "Public can insert chargers" ON chargers
 
 CREATE POLICY "Public can update chargers" ON chargers
   FOR UPDATE USING (true) WITH CHECK (true);
+
+CREATE POLICY "Public can delete chargers" ON chargers
+  FOR DELETE USING (true);
 
 -- Public access to charger images (storage)
 CREATE POLICY "Public can view charger images" ON storage.objects

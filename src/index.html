@@ -4,20 +4,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EV Charger Map</title>
+  <link rel="icon" type="image/png" href="assets/icon/logo.png">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; }
+    body { font-family: "Segoe UI", Tahoma, Arial, sans-serif; color: #0f172a; background: #eef1f7; }
     #map { height: 100vh; width: 100%; }
     .panel {
       position: fixed;
       top: 0;
       right: 0;
-      width: 360px;
+      width: 380px;
       max-width: 90vw;
       height: 100vh;
-      background: #ffffff;
-      border-left: 1px solid #e5e5e5;
-      box-shadow: -4px 0 12px rgba(0, 0, 0, 0.08);
+      background: #f6f7fb;
+      border-left: 1px solid #e2e8f0;
+      box-shadow: -10px 0 30px rgba(15, 23, 42, 0.12);
       z-index: 5;
       display: flex;
       flex-direction: column;
@@ -25,22 +27,36 @@
     .panel.hidden { display: none; }
     .panel-header {
       padding: 16px;
-      border-bottom: 1px solid #e5e5e5;
+      border-bottom: 1px solid #e2e8f0;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+      background: #ffffff;
+      box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
+    }
+    .panel-header-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
     }
     .panel-header h2 {
       font-size: 18px;
       line-height: 1.2;
+      font-weight: 600;
+      color: #0f172a;
     }
     .panel-header button {
-      padding: 6px 10px;
-      border: 1px solid #d0d0d0;
-      background: #f7f7f7;
+      padding: 7px 12px;
+      border: 1px solid #d5dbe5;
+      background: #f8fafc;
       cursor: pointer;
-      border-radius: 4px;
+      border-radius: 8px;
+      color: #1f2937;
+      font-weight: 600;
+    }
+    .panel-header button:hover {
+      background: #eef2f7;
     }
     .panel-body {
       padding: 16px;
@@ -51,30 +67,36 @@
     }
     .station-meta {
       font-size: 13px;
-      color: #555;
+      color: #64748b;
     }
     .charger-icons {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
+      gap: 10px;
     }
     .charger-button {
-      border: 1px solid #d8d8d8;
-      background: #fafafa;
-      border-radius: 8px;
-      padding: 10px 6px;
+      border: 1px solid #e2e8f0;
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 12px 8px;
       text-align: center;
       cursor: pointer;
       display: flex;
       flex-direction: column;
       gap: 6px;
       font-size: 12px;
-      color: #333;
+      color: #1f2937;
+      box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .charger-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
     }
     .charger-button.active {
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-      background: #f0f6ff;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+      background: #eff6ff;
     }
     .charger-icon {
       font-size: 20px;
@@ -84,16 +106,18 @@
       padding: 2px 6px;
       border-radius: 999px;
       font-size: 10px;
-      background: #e8f5e9;
-      color: #256029;
+      background: #dcfce7;
+      color: #166534;
     }
     .charger-editor {
-      border: 1px solid #e5e5e5;
-      border-radius: 8px;
-      padding: 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 14px;
       display: flex;
       flex-direction: column;
       gap: 10px;
+      background: #ffffff;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
     }
     .charger-editor.hidden { display: none; }
     .form-grid {
@@ -106,12 +130,20 @@
       flex-direction: column;
       gap: 4px;
       font-size: 12px;
-      color: #333;
+      color: #475569;
     }
     .form-grid input {
-      padding: 6px 8px;
-      border: 1px solid #cfcfcf;
-      border-radius: 4px;
+      padding: 8px 10px;
+      border: 1px solid #d8dee9;
+      border-radius: 8px;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    .form-grid input:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+      background: #ffffff;
     }
     .image-list {
       display: grid;
@@ -120,11 +152,11 @@
     }
     .image-item {
       position: relative;
-      border: 1px solid #e1e1e1;
-      border-radius: 6px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
       overflow: hidden;
       aspect-ratio: 1 / 1;
-      background: #f8f8f8;
+      background: #f8fafc;
     }
     .image-item img {
       width: 100%;
@@ -146,19 +178,164 @@
     }
     .status {
       font-size: 12px;
-      color: #555;
+      color: #64748b;
     }
     .primary-button {
-      padding: 8px 12px;
+      padding: 10px 12px;
       border: none;
-      background: #3b82f6;
+      background: linear-gradient(135deg, #2563eb, #3b82f6);
       color: #fff;
-      border-radius: 6px;
+      border-radius: 10px;
       cursor: pointer;
+      font-weight: 600;
+      box-shadow: 0 10px 20px rgba(37, 99, 235, 0.25);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .primary-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 26px rgba(37, 99, 235, 0.35);
+    }
+    .danger-button {
+      padding: 10px 12px;
+      border: none;
+      background: linear-gradient(135deg, #dc2626, #ef4444);
+      color: #fff;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      box-shadow: 0 10px 20px rgba(220, 38, 38, 0.25);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .danger-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 26px rgba(220, 38, 38, 0.35);
     }
     .loading {
       font-size: 12px;
-      color: #666;
+      color: #64748b;
+    }
+    .station-list {
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: #ffffff;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+    }
+    .station-list-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .station-list-items {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 240px;
+      overflow: auto;
+    }
+    .station-list-item {
+      display: grid;
+      grid-template-columns: 20px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 12px;
+      background: #fff;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .station-list-item.active {
+      border-color: #2563eb;
+      background: #eff6ff;
+      box-shadow: 0 10px 18px rgba(37, 99, 235, 0.15);
+    }
+    .station-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .station-info small {
+      color: #64748b;
+    }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      padding: 16px;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      width: 100%;
+      max-width: 420px;
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 30px 60px rgba(15, 23, 42, 0.25);
+      border: 1px solid #e2e8f0;
+      overflow: hidden;
+    }
+    .modal-header {
+      padding: 16px 18px;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #f8fafc;
+    }
+    .modal-header h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #0f172a;
+    }
+    .modal-body {
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .modal-actions {
+      padding: 14px 18px 18px;
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    .secondary-button {
+      padding: 10px 12px;
+      border: 1px solid #d5dbe5;
+      background: #f8fafc;
+      color: #1f2937;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .secondary-button:hover {
+      background: #eef2f7;
+    }
+    .modal-error {
+      font-size: 12px;
+      color: #b91c1c;
+    }
+    .station-list-item button {
+      padding: 4px 8px;
+      border: 1px solid #d0d0d0;
+      background: #f7f7f7;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .station-list-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: flex-end;
     }
   </style>
 </head>
@@ -167,10 +344,25 @@
   <div id="station-panel" class="panel hidden">
     <div class="panel-header">
       <h2 id="station-title">Station</h2>
-      <button id="panel-close" type="button">Close</button>
+      <div class="panel-header-actions">
+        <button id="create-station" type="button">Add station</button>
+        <button id="panel-close" type="button">Close</button>
+      </div>
     </div>
     <div class="panel-body">
       <div id="station-meta" class="station-meta"></div>
+      <button id="add-charger" class="primary-button" type="button">Add charger</button>
+      <button id="remove-charger" class="danger-button" type="button">Remove charger</button>
+      <div class="station-list">
+        <div class="station-list-header">
+          <strong>Stations</strong>
+          <button id="refresh-stations" type="button">Refresh</button>
+        </div>
+        <div id="station-list" class="station-list-items"></div>
+        <div class="station-list-actions">
+          <button id="remove-selected" class="danger-button" type="button">Remove selected</button>
+        </div>
+      </div>
       <div id="charger-icons" class="charger-icons"></div>
       <div id="charger-editor" class="charger-editor hidden">
         <strong id="charger-title">Charger</strong>
@@ -203,6 +395,33 @@
       <div id="panel-status" class="loading"></div>
     </div>
   </div>
+  <div id="station-modal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="station-modal-title">
+      <div class="modal-header">
+        <h3 id="station-modal-title">Add station</h3>
+        <button id="station-modal-close" type="button">Close</button>
+      </div>
+      <div class="modal-body">
+        <label class="form-grid">
+          <span>Station name</span>
+          <input id="station-name-input" type="text" placeholder="Station name" />
+        </label>
+        <label class="form-grid">
+          <span>Latitude</span>
+          <input id="station-lat-input" type="number" step="0.000001" placeholder="41.1951" />
+        </label>
+        <label class="form-grid">
+          <span>Longitude</span>
+          <input id="station-lng-input" type="number" step="0.000001" placeholder="-111.9480" />
+        </label>
+        <div id="station-modal-error" class="modal-error"></div>
+      </div>
+      <div class="modal-actions">
+        <button id="station-modal-cancel" class="secondary-button" type="button">Cancel</button>
+        <button id="station-modal-save" class="primary-button" type="button">Add station</button>
+      </div>
+    </div>
+  </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     const API_KEY = '__MAPS_API_KEY__';
@@ -216,6 +435,20 @@
     const panelStatus = document.getElementById('panel-status');
     const stationTitle = document.getElementById('station-title');
     const stationMeta = document.getElementById('station-meta');
+    const createStationButton = document.getElementById('create-station');
+    const addChargerButton = document.getElementById('add-charger');
+    const removeChargerButton = document.getElementById('remove-charger');
+    const stationList = document.getElementById('station-list');
+    const refreshStationsButton = document.getElementById('refresh-stations');
+    const removeSelectedButton = document.getElementById('remove-selected');
+    const stationModal = document.getElementById('station-modal');
+    const stationModalClose = document.getElementById('station-modal-close');
+    const stationModalCancel = document.getElementById('station-modal-cancel');
+    const stationModalSave = document.getElementById('station-modal-save');
+    const stationNameInput = document.getElementById('station-name-input');
+    const stationLatInput = document.getElementById('station-lat-input');
+    const stationLngInput = document.getElementById('station-lng-input');
+    const stationModalError = document.getElementById('station-modal-error');
     const chargerIcons = document.getElementById('charger-icons');
     const chargerEditor = document.getElementById('charger-editor');
     const chargerTitle = document.getElementById('charger-title');
@@ -229,11 +462,18 @@
     const chargerStatus = document.getElementById('charger-status');
 
     const stationCache = new Map();
+    const markersByKey = new Map();
     let activeStation = null;
     let activeStationRecord = null;
     let activeChargers = [];
     let activeChargerIndex = null;
     let activeImages = [];
+    let mapInstance = null;
+    let infoWindow = null;
+    removeChargerButton.disabled = true;
+    let lastLoadedStations = [];
+    let defaultMarkerIcon = null;
+    let selectedMarkerIcon = null;
 
     panelClose.addEventListener('click', () => {
       panel.classList.add('hidden');
@@ -242,6 +482,151 @@
       activeChargers = [];
       activeChargerIndex = null;
       chargerEditor.classList.add('hidden');
+      removeChargerButton.disabled = true;
+      resetMarkerSelection();
+    });
+
+    refreshStationsButton.addEventListener('click', () => {
+      refreshStationList({ updateMap: true, focusActive: false });
+    });
+
+    removeSelectedButton.addEventListener('click', async () => {
+      const selectedIds = Array.from(
+        stationList.querySelectorAll('input[type="checkbox"]:checked')
+      ).map(input => input.value);
+      if (selectedIds.length === 0) return;
+      const confirmed = window.confirm(`Remove ${selectedIds.length} station(s)? This will delete their charger details too.`);
+      if (!confirmed) return;
+      removeSelectedButton.disabled = true;
+      panelStatus.textContent = 'Removing stations...';
+      const { data, error } = await supabaseClient
+        .from('stations')
+        .delete()
+        .in('id', selectedIds)
+        .select('id');
+      if (error) {
+        console.error(error);
+        panelStatus.textContent = `Failed to remove stations: ${error.message || 'Unknown error'}`;
+      } else if (!data || data.length === 0) {
+        panelStatus.textContent = 'No stations were removed. They may not exist in Supabase.';
+      } else {
+        selectedIds.forEach(id => {
+          const station = lastLoadedStations.find(item => item.id === id);
+          if (station) removeStationFromMap(station);
+        });
+        if (activeStation && selectedIds.includes(activeStation.id)) {
+          panel.classList.add('hidden');
+          activeStation = null;
+          activeStationRecord = null;
+          activeChargers = [];
+          activeChargerIndex = null;
+          chargerEditor.classList.add('hidden');
+          removeChargerButton.disabled = true;
+        }
+        panelStatus.textContent = `Stations removed (${data.length}).`;
+        refreshStationList({ updateMap: false });
+      }
+      removeSelectedButton.disabled = false;
+    });
+
+    createStationButton.addEventListener('click', () => {
+      stationModalError.textContent = '';
+      stationNameInput.value = '';
+      stationLatInput.value = '';
+      stationLngInput.value = '';
+      stationModal.classList.add('active');
+      stationModal.setAttribute('aria-hidden', 'false');
+      stationNameInput.focus();
+    });
+
+    function closeStationModal() {
+      stationModal.classList.remove('active');
+      stationModal.setAttribute('aria-hidden', 'true');
+    }
+
+    stationModalClose.addEventListener('click', closeStationModal);
+    stationModalCancel.addEventListener('click', closeStationModal);
+    stationModal.addEventListener('click', (event) => {
+      if (event.target === stationModal) closeStationModal();
+    });
+
+    stationModalSave.addEventListener('click', async () => {
+      const name = stationNameInput.value.trim();
+      const lat = Number.parseFloat(stationLatInput.value);
+      const lng = Number.parseFloat(stationLngInput.value);
+      if (!name) {
+        stationModalError.textContent = 'Station name is required.';
+        return;
+      }
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        stationModalError.textContent = 'Latitude and longitude must be valid numbers.';
+        return;
+      }
+      stationModalError.textContent = '';
+      const station = {
+        name,
+        lat,
+        lng,
+        totalChargers: 1
+      };
+      stationModalSave.disabled = true;
+      panelStatus.textContent = 'Saving station...';
+      try {
+        const created = await createStation(station);
+        addStationToMap(created);
+        panelStatus.textContent = 'Station added.';
+        closeStationModal();
+        openStationPanel(created);
+        refreshStationList({ updateMap: false });
+      } catch (err) {
+        console.error(err);
+        stationModalError.textContent = `Failed to add station: ${err.message || 'Unknown error'}`;
+      } finally {
+        stationModalSave.disabled = false;
+      }
+    });
+
+    addChargerButton.addEventListener('click', async () => {
+      if (!activeStation) return;
+      panelStatus.textContent = 'Adding charger...';
+      try {
+        const nextTotal = normalizeTotalChargers(activeStation.totalChargers + 1);
+        await updateStationTotal(activeStation, nextTotal);
+        activeStation.totalChargers = nextTotal;
+        stationMeta.textContent = `${nextTotal} charger(s) • ${activeStation.lat.toFixed(5)}, ${activeStation.lng.toFixed(5)}`;
+        removeChargerButton.disabled = nextTotal <= 1;
+        renderChargerIcons(nextTotal);
+        panelStatus.textContent = 'Charger added.';
+        refreshStationList({ updateMap: false });
+      } catch (err) {
+        console.error(err);
+        panelStatus.textContent = `Failed to add charger: ${err.message || 'Unknown error'}`;
+      }
+    });
+
+    removeChargerButton.addEventListener('click', async () => {
+      if (!activeStation) return;
+      if (activeStation.totalChargers <= 1) return;
+      const confirmed = window.confirm('Remove the last charger from this station?');
+      if (!confirmed) return;
+      panelStatus.textContent = 'Removing charger...';
+      try {
+        const nextTotal = normalizeTotalChargers(activeStation.totalChargers - 1);
+        await updateStationTotal(activeStation, nextTotal);
+        activeStation.totalChargers = nextTotal;
+        stationMeta.textContent = `${nextTotal} charger(s) • ${activeStation.lat.toFixed(5)}, ${activeStation.lng.toFixed(5)}`;
+        removeChargerButton.disabled = nextTotal <= 1;
+        if (activeChargerIndex && activeChargerIndex > nextTotal) {
+          activeChargerIndex = null;
+          chargerEditor.classList.add('hidden');
+        }
+        renderChargerIcons(nextTotal);
+        panelStatus.textContent = 'Charger removed.';
+        refreshStationList({ updateMap: false });
+      } catch (err) {
+        console.error(err);
+        panelStatus.textContent = `Failed to remove charger: ${err.message || 'Unknown error'}`;
+      }
     });
 
     imagesInput.addEventListener('change', async (event) => {
@@ -295,49 +680,163 @@
 
     function initMap() {
       const center = { lat: 41.19, lng: -111.94 };
-      const map = new google.maps.Map(document.getElementById('map'), {
+      mapInstance = new google.maps.Map(document.getElementById('map'), {
         zoom: 13,
         center: center
       });
 
-      const infoWindow = new google.maps.InfoWindow();
+      infoWindow = new google.maps.InfoWindow();
+      ensureMarkerIcons();
 
-      fetch('station.json')
-        .then(res => res.json())
+      loadStations()
         .then(stations => {
-          if (stations.length > 0) {
-            const bounds = new google.maps.LatLngBounds();
-            stations.forEach(station => {
-              const position = { lat: station.lat, lng: station.lng };
-              bounds.extend(position);
-              const marker = new google.maps.Marker({
-                position,
-                map,
-                title: station.name
-              });
-              marker.addListener('click', () => {
-                infoWindow.setContent(
-                  `<strong>${station.name}</strong><br>${station.totalChargers} charger(s)`
-                );
-                infoWindow.open(map, marker);
-                openStationPanel(station);
-              });
-            });
-            map.fitBounds(bounds);
-          }
+          const uniqueStations = dedupeStations(stations);
+          renderStations(uniqueStations, { fitBounds: true });
+          lastLoadedStations = uniqueStations;
+          renderStationList(uniqueStations);
         })
         .catch(err => console.error('Failed to load stations:', err));
+    }
+
+    async function loadStations() {
+      let seedStations = [];
+      try {
+        const response = await fetch('station.json');
+        seedStations = await response.json();
+      } catch (err) {
+        console.warn('Failed to load station.json:', err);
+      }
+
+      let dbStations = [];
+      let dbHasTotals = true;
+      try {
+        const { data, error } = await supabaseClient
+          .from('stations')
+          .select('id,name,lat,lng,total_chargers');
+        if (error) throw error;
+        dbStations = data || [];
+      } catch (err) {
+        dbHasTotals = false;
+        try {
+          const { data, error } = await supabaseClient
+            .from('stations')
+            .select('id,name,lat,lng');
+          if (error) throw error;
+          dbStations = data || [];
+        } catch (fallbackErr) {
+          console.warn('Failed to load stations from Supabase:', fallbackErr);
+          return seedStations;
+        }
+      }
+
+      if (dbStations.length === 0 && seedStations.length > 0) {
+        const seeded = await seedStationsInSupabase(seedStations, dbHasTotals);
+        if (seeded.length > 0) dbStations = seeded;
+      }
+
+      if (dbStations.length === 0) return seedStations;
+
+      const seedLookup = new Map(
+        seedStations.map(item => [stationKeyFromFields(item.name, item.lat, item.lng), item])
+      );
+      if (dbHasTotals && seedStations.length > 0) {
+        dbStations = await syncTotalsFromSeed(dbStations, seedLookup);
+      }
+      return dbStations.map(item => {
+        const seed = seedLookup.get(stationKeyFromFields(item.name, item.lat, item.lng));
+        return normalizeStationRecord(item, seed?.totalChargers);
+      });
+    }
+
+    async function seedStationsInSupabase(seedStations, includeTotals) {
+      const payload = seedStations.map(item => ({
+        name: item.name,
+        lat: item.lat,
+        lng: item.lng,
+        ...(includeTotals ? { total_chargers: normalizeTotalChargers(item.totalChargers) } : {})
+      }));
+      const { data, error } = await supabaseClient
+        .from('stations')
+        .insert(payload)
+        .select();
+      if (error) {
+        if (includeTotals && isMissingTotalsColumn(error)) {
+          return seedStationsInSupabase(seedStations, false);
+        }
+        console.warn('Failed to seed stations:', error);
+        return [];
+      }
+      return (data || []).map(item => normalizeStationRecord(item));
+    }
+
+    function renderStations(stations, options = {}) {
+      const uniqueStations = dedupeStations(stations);
+      const { fitBounds = true, focusActive = false } = options;
+      markersByKey.forEach(marker => marker.setMap(null));
+      markersByKey.clear();
+      if (!mapInstance) return;
+      if (!uniqueStations || uniqueStations.length === 0) return;
+      const bounds = new google.maps.LatLngBounds();
+      uniqueStations.forEach(station => {
+        addStationToMap(station);
+        bounds.extend({ lat: station.lat, lng: station.lng });
+      });
+      if (fitBounds) {
+        mapInstance.fitBounds(bounds);
+      }
+      if (focusActive && activeStation) {
+        const activeMarker = markersByKey.get(stationKey(activeStation));
+        if (activeMarker) {
+          infoWindow.setContent(
+            `<strong>${activeStation.name}</strong><br>${activeStation.totalChargers} charger(s)`
+          );
+          infoWindow.open(mapInstance, activeMarker);
+        }
+      }
+    }
+
+    function addStationToMap(station) {
+      if (!mapInstance) return;
+      ensureMarkerIcons();
+      const key = stationKey(station);
+      if (markersByKey.has(key)) return;
+      const marker = new google.maps.Marker({
+        position: { lat: station.lat, lng: station.lng },
+        map: mapInstance,
+        title: station.name,
+        icon: defaultMarkerIcon
+      });
+      marker.addListener('click', () => {
+        infoWindow.setContent(
+          `<strong>${station.name}</strong><br>${station.totalChargers} charger(s)`
+        );
+        infoWindow.open(mapInstance, marker);
+        openStationPanel(station);
+        focusStationMarker(station);
+      });
+      markersByKey.set(key, marker);
+    }
+
+    function removeStationFromMap(station) {
+      const key = stationKey(station);
+      const marker = markersByKey.get(key);
+      if (marker) marker.setMap(null);
+      markersByKey.delete(key);
+      stationCache.delete(key);
     }
 
     async function openStationPanel(station) {
       activeStation = station;
       stationTitle.textContent = station.name;
       stationMeta.textContent = `${station.totalChargers} charger(s) • ${station.lat.toFixed(5)}, ${station.lng.toFixed(5)}`;
+      removeChargerButton.disabled = station.totalChargers <= 1;
       panel.classList.remove('hidden');
       panelStatus.textContent = 'Loading chargers...';
       chargerEditor.classList.add('hidden');
       chargerStatus.textContent = '';
       chargerIcons.innerHTML = '';
+      refreshStationList({ updateMap: false });
+      focusStationMarker(station);
       try {
         activeStationRecord = await getOrCreateStation(station);
         activeChargers = await fetchChargers(activeStationRecord.id);
@@ -350,7 +849,8 @@
     }
 
     async function getOrCreateStation(station) {
-      const cacheKey = `${station.name}-${station.lat}-${station.lng}`;
+      if (station.id) return station;
+      const cacheKey = stationKey(station);
       if (stationCache.has(cacheKey)) return stationCache.get(cacheKey);
       const { data: existing, error: fetchError } = await supabaseClient
         .from('stations')
@@ -365,18 +865,268 @@
         stationCache.set(cacheKey, existing);
         return existing;
       }
-      const { data: inserted, error: insertError } = await supabaseClient
-        .from('stations')
-        .insert({
-          name: station.name,
-          lat: station.lat,
-          lng: station.lng
-        })
-        .select()
-        .single();
-      if (insertError) throw insertError;
+      const inserted = await insertStationRecord(station);
       stationCache.set(cacheKey, inserted);
       return inserted;
+    }
+
+    function stationKeyFromFields(name, lat, lng) {
+      const safeName = (name || '').trim();
+      const safeLat = Number(lat).toFixed(6);
+      const safeLng = Number(lng).toFixed(6);
+      return `${safeName}::${safeLat}::${safeLng}`;
+    }
+
+    function stationKey(station) {
+      return station.id || stationKeyFromFields(station.name, station.lat, station.lng);
+    }
+
+    function normalizeTotalChargers(value) {
+      const parsed = Number.parseInt(value, 10);
+      if (Number.isNaN(parsed) || parsed < 1) return 1;
+      return parsed;
+    }
+
+    function normalizeStationRecord(record, fallbackTotal) {
+      return {
+        id: record?.id || null,
+        name: record?.name,
+        lat: record?.lat,
+        lng: record?.lng,
+        totalChargers: normalizeTotalChargers(
+          record?.total_chargers ?? record?.totalChargers ?? fallbackTotal ?? 1
+        )
+      };
+    }
+
+    function dedupeStations(stations) {
+      if (!Array.isArray(stations)) return [];
+      const byKey = new Map();
+      stations.forEach(station => {
+        const key = stationKeyFromFields(station.name, station.lat, station.lng);
+        if (!byKey.has(key)) {
+          byKey.set(key, station);
+          return;
+        }
+        const existing = byKey.get(key);
+        const existingScore = existing?.id ? 1 : 0;
+        const nextScore = station?.id ? 1 : 0;
+        if (nextScore > existingScore) {
+          byKey.set(key, station);
+          return;
+        }
+        if (nextScore === existingScore) {
+          const existingTotal = existing?.totalChargers ?? 0;
+          const nextTotal = station?.totalChargers ?? 0;
+          if (nextTotal > existingTotal) {
+            byKey.set(key, station);
+          }
+        }
+      });
+      return Array.from(byKey.values());
+    }
+
+    async function syncTotalsFromSeed(dbStations, seedLookup) {
+      const updates = [];
+      const normalized = dbStations.map(item => {
+        const seed = seedLookup.get(stationKeyFromFields(item.name, item.lat, item.lng));
+        if (!seed) return item;
+        const seedTotal = normalizeTotalChargers(seed.totalChargers);
+        const currentTotal = item.total_chargers ?? item.totalChargers;
+        if ((currentTotal === null || currentTotal === 1) && seedTotal !== 1) {
+          updates.push({ id: item.id, total_chargers: seedTotal });
+          return { ...item, total_chargers: seedTotal };
+        }
+        return item;
+      });
+      if (updates.length === 0) return normalized;
+      await Promise.all(
+        updates.map(update => supabaseClient
+          .from('stations')
+          .update({ total_chargers: update.total_chargers })
+          .eq('id', update.id))
+      );
+      return normalized;
+    }
+
+    function isMissingTotalsColumn(error) {
+      return typeof error?.message === 'string' && error.message.includes('total_chargers');
+    }
+
+    async function insertStationRecord(station) {
+      const payload = {
+        name: station.name,
+        lat: station.lat,
+        lng: station.lng,
+        total_chargers: normalizeTotalChargers(station.totalChargers)
+      };
+      let { data, error } = await supabaseClient
+        .from('stations')
+        .insert(payload)
+        .select()
+        .single();
+      if (error && isMissingTotalsColumn(error)) {
+        const fallback = await supabaseClient
+          .from('stations')
+          .insert({
+            name: station.name,
+            lat: station.lat,
+            lng: station.lng
+          })
+          .select()
+          .single();
+        data = fallback.data;
+        error = fallback.error;
+      }
+      if (error) throw error;
+      return normalizeStationRecord(data, station.totalChargers);
+    }
+
+    async function createStation(station) {
+      const inserted = await insertStationRecord(station);
+      stationCache.set(stationKey(inserted), inserted);
+      return inserted;
+    }
+
+    function ensureMarkerIcons() {
+      if (defaultMarkerIcon && selectedMarkerIcon) return;
+      defaultMarkerIcon = {
+        url: 'assets/icon/pin.png',
+        scaledSize: new google.maps.Size(36, 36),
+        anchor: new google.maps.Point(18, 36)
+      };
+      selectedMarkerIcon = {
+        url: 'assets/icon/station.png',
+        scaledSize: new google.maps.Size(44, 44),
+        anchor: new google.maps.Point(22, 44)
+      };
+    }
+
+    function focusStationMarker(station) {
+      if (!mapInstance) return;
+      if (!station) return;
+      ensureMarkerIcons();
+      markersByKey.forEach((marker, key) => {
+        const isActive = key === stationKey(station);
+        marker.setIcon(isActive ? selectedMarkerIcon : defaultMarkerIcon);
+        marker.setZIndex(isActive ? 1000 : undefined);
+      });
+      mapInstance.panTo({ lat: station.lat, lng: station.lng });
+      mapInstance.setZoom(16);
+    }
+
+    function resetMarkerSelection() {
+      if (!mapInstance) return;
+      ensureMarkerIcons();
+      markersByKey.forEach(marker => {
+        marker.setIcon(defaultMarkerIcon);
+        marker.setZIndex(undefined);
+      });
+      if (infoWindow) infoWindow.close();
+    }
+
+    async function refreshStationList(options = {}) {
+      const { updateMap = true, focusActive = true } = options;
+      const stations = await loadStations();
+      const uniqueStations = dedupeStations(stations);
+      lastLoadedStations = uniqueStations;
+      if (updateMap) {
+        renderStations(uniqueStations, { fitBounds: false, focusActive });
+      }
+      renderStationList(uniqueStations);
+    }
+
+    function renderStationList(stations) {
+      stationList.innerHTML = '';
+      if (!stations || stations.length === 0) {
+        stationList.textContent = 'No stations found.';
+        return;
+      }
+      const activeKey = activeStation ? stationKey(activeStation) : null;
+      const ordered = [...stations].sort((a, b) => {
+        const aActive = activeKey && stationKey(a) === activeKey;
+        const bActive = activeKey && stationKey(b) === activeKey;
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+        return a.name.localeCompare(b.name);
+      });
+      ordered.forEach(station => {
+        const item = document.createElement('div');
+        item.className = 'station-list-item';
+        if (activeKey && stationKey(station) === activeKey) {
+          item.classList.add('active');
+        }
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = station.id || '';
+        checkbox.disabled = !station.id;
+        const info = document.createElement('div');
+        info.className = 'station-info';
+        const name = document.createElement('strong');
+        name.textContent = station.name;
+        const meta = document.createElement('small');
+        meta.textContent = `${station.totalChargers} charger(s) • ${station.lat.toFixed(4)}, ${station.lng.toFixed(4)}`;
+        info.appendChild(name);
+        info.appendChild(meta);
+        info.addEventListener('click', () => openStationPanel(station));
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.textContent = 'Remove';
+        removeButton.disabled = !station.id;
+        removeButton.addEventListener('click', () => removeStationById(station));
+        item.appendChild(checkbox);
+        item.appendChild(info);
+        item.appendChild(removeButton);
+        stationList.appendChild(item);
+      });
+    }
+
+    async function removeStationById(station) {
+      if (!station?.id) return;
+      const confirmed = window.confirm(`Remove station "${station.name}"? This will delete charger details too.`);
+      if (!confirmed) return;
+      panelStatus.textContent = 'Removing station...';
+      const { data, error } = await supabaseClient
+        .from('stations')
+        .delete()
+        .eq('id', station.id)
+        .select('id');
+      if (error) {
+        console.error(error);
+        panelStatus.textContent = `Failed to remove station: ${error.message || 'Unknown error'}`;
+      } else if (!data || data.length === 0) {
+        panelStatus.textContent = 'No station was removed. It may not exist in Supabase.';
+      } else {
+        removeStationFromMap(station);
+        if (activeStation && activeStation.id === station.id) {
+          panel.classList.add('hidden');
+          activeStation = null;
+          activeStationRecord = null;
+          activeChargers = [];
+          activeChargerIndex = null;
+          chargerEditor.classList.add('hidden');
+          removeChargerButton.disabled = true;
+        }
+        panelStatus.textContent = 'Station removed.';
+        refreshStationList();
+      }
+    }
+
+    async function updateStationTotal(station, nextTotal) {
+      const record = await getOrCreateStation(station);
+      activeStationRecord = record;
+      const { data, error } = await supabaseClient
+        .from('stations')
+        .update({ total_chargers: nextTotal })
+        .eq('id', record.id)
+        .select()
+        .single();
+      if (error && isMissingTotalsColumn(error)) {
+        return { ...record, total_chargers: nextTotal };
+      }
+      if (error) throw error;
+      stationCache.set(stationKey(record), data);
+      return data;
     }
 
     async function fetchChargers(stationId) {
