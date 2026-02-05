@@ -8,12 +8,290 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; }
     #map { height: 100vh; width: 100%; }
+    .panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 360px;
+      max-width: 90vw;
+      height: 100vh;
+      background: #ffffff;
+      border-left: 1px solid #e5e5e5;
+      box-shadow: -4px 0 12px rgba(0, 0, 0, 0.08);
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+    }
+    .panel.hidden { display: none; }
+    .panel-header {
+      padding: 16px;
+      border-bottom: 1px solid #e5e5e5;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .panel-header h2 {
+      font-size: 18px;
+      line-height: 1.2;
+    }
+    .panel-header button {
+      padding: 6px 10px;
+      border: 1px solid #d0d0d0;
+      background: #f7f7f7;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .panel-body {
+      padding: 16px;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .station-meta {
+      font-size: 13px;
+      color: #555;
+    }
+    .charger-icons {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .charger-button {
+      border: 1px solid #d8d8d8;
+      background: #fafafa;
+      border-radius: 8px;
+      padding: 10px 6px;
+      text-align: center;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+      color: #333;
+    }
+    .charger-button.active {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+      background: #f0f6ff;
+    }
+    .charger-icon {
+      font-size: 20px;
+    }
+    .charger-button .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      background: #e8f5e9;
+      color: #256029;
+    }
+    .charger-editor {
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .charger-editor.hidden { display: none; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+    .form-grid label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+      color: #333;
+    }
+    .form-grid input {
+      padding: 6px 8px;
+      border: 1px solid #cfcfcf;
+      border-radius: 4px;
+    }
+    .image-list {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .image-item {
+      position: relative;
+      border: 1px solid #e1e1e1;
+      border-radius: 6px;
+      overflow: hidden;
+      aspect-ratio: 1 / 1;
+      background: #f8f8f8;
+    }
+    .image-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .image-item button {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      border: none;
+      background: rgba(0, 0, 0, 0.6);
+      color: #fff;
+      font-size: 10px;
+      padding: 2px 5px;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .status {
+      font-size: 12px;
+      color: #555;
+    }
+    .primary-button {
+      padding: 8px 12px;
+      border: none;
+      background: #3b82f6;
+      color: #fff;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .loading {
+      font-size: 12px;
+      color: #666;
+    }
   </style>
 </head>
 <body>
   <div id="map"></div>
+  <div id="station-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2 id="station-title">Station</h2>
+      <button id="panel-close" type="button">Close</button>
+    </div>
+    <div class="panel-body">
+      <div id="station-meta" class="station-meta"></div>
+      <div id="charger-icons" class="charger-icons"></div>
+      <div id="charger-editor" class="charger-editor hidden">
+        <strong id="charger-title">Charger</strong>
+        <form id="charger-form" class="form-grid">
+          <label>
+            Vendor name
+            <input id="vendor-input" type="text" placeholder="Vendor" />
+          </label>
+          <label>
+            Serial number
+            <input id="serial-input" type="text" placeholder="Serial number" />
+          </label>
+          <label>
+            Model number
+            <input id="model-input" type="text" placeholder="Model number" />
+          </label>
+          <label>
+            MAC address
+            <input id="mac-input" type="text" placeholder="MAC address" />
+          </label>
+          <label>
+            Charger images
+            <input id="images-input" type="file" accept="image/*" multiple />
+          </label>
+        </form>
+        <div id="image-list" class="image-list"></div>
+        <button id="save-charger" class="primary-button" type="button">Save charger</button>
+        <div id="charger-status" class="status"></div>
+      </div>
+      <div id="panel-status" class="loading"></div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     const API_KEY = '__MAPS_API_KEY__';
+    const SUPABASE_URL = '__SUPABASE_URL__';
+    const SUPABASE_ANON_KEY = '__SUPABASE_ANON_KEY__';
+
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const panel = document.getElementById('station-panel');
+    const panelClose = document.getElementById('panel-close');
+    const panelStatus = document.getElementById('panel-status');
+    const stationTitle = document.getElementById('station-title');
+    const stationMeta = document.getElementById('station-meta');
+    const chargerIcons = document.getElementById('charger-icons');
+    const chargerEditor = document.getElementById('charger-editor');
+    const chargerTitle = document.getElementById('charger-title');
+    const vendorInput = document.getElementById('vendor-input');
+    const serialInput = document.getElementById('serial-input');
+    const modelInput = document.getElementById('model-input');
+    const macInput = document.getElementById('mac-input');
+    const imagesInput = document.getElementById('images-input');
+    const imageList = document.getElementById('image-list');
+    const saveChargerButton = document.getElementById('save-charger');
+    const chargerStatus = document.getElementById('charger-status');
+
+    const stationCache = new Map();
+    let activeStation = null;
+    let activeStationRecord = null;
+    let activeChargers = [];
+    let activeChargerIndex = null;
+    let activeImages = [];
+
+    panelClose.addEventListener('click', () => {
+      panel.classList.add('hidden');
+      activeStation = null;
+      activeStationRecord = null;
+      activeChargers = [];
+      activeChargerIndex = null;
+      chargerEditor.classList.add('hidden');
+    });
+
+    imagesInput.addEventListener('change', async (event) => {
+      if (!activeStationRecord || !activeChargerIndex) return;
+      const files = Array.from(event.target.files || []);
+      if (files.length === 0) return;
+      chargerStatus.textContent = 'Uploading images...';
+      saveChargerButton.disabled = true;
+      try {
+        const uploadedUrls = await uploadImages(activeStationRecord.id, activeChargerIndex, files);
+        activeImages = activeImages.concat(uploadedUrls);
+        renderImageList();
+        chargerStatus.textContent = `Uploaded ${uploadedUrls.length} image(s).`;
+      } catch (err) {
+        console.error(err);
+        chargerStatus.textContent = `Failed to upload images: ${err.message || 'Unknown error'}`;
+      } finally {
+        saveChargerButton.disabled = false;
+        imagesInput.value = '';
+      }
+    });
+
+    saveChargerButton.addEventListener('click', async () => {
+      if (!activeStationRecord || !activeChargerIndex) return;
+      chargerStatus.textContent = 'Saving charger...';
+      saveChargerButton.disabled = true;
+      const payload = {
+        station_id: activeStationRecord.id,
+        charger_index: activeChargerIndex,
+        vendor: cleanValue(vendorInput.value),
+        serial_number: cleanValue(serialInput.value),
+        model_number: cleanValue(modelInput.value),
+        mac_address: cleanValue(macInput.value),
+        images: activeImages
+      };
+      const { data, error } = await supabaseClient
+        .from('chargers')
+        .upsert(payload, { onConflict: 'station_id,charger_index' })
+        .select()
+        .single();
+      if (error) {
+        console.error(error);
+        chargerStatus.textContent = `Failed to save charger: ${error.message || 'Unknown error'}`;
+      } else {
+        chargerStatus.textContent = 'Charger saved.';
+        updateLocalCharger(data);
+        renderChargerIcons(activeStation.totalChargers);
+      }
+      saveChargerButton.disabled = false;
+    });
 
     function initMap() {
       const center = { lat: 41.19, lng: -111.94 };
@@ -42,12 +320,177 @@
                   `<strong>${station.name}</strong><br>${station.totalChargers} charger(s)`
                 );
                 infoWindow.open(map, marker);
+                openStationPanel(station);
               });
             });
             map.fitBounds(bounds);
           }
         })
         .catch(err => console.error('Failed to load stations:', err));
+    }
+
+    async function openStationPanel(station) {
+      activeStation = station;
+      stationTitle.textContent = station.name;
+      stationMeta.textContent = `${station.totalChargers} charger(s) • ${station.lat.toFixed(5)}, ${station.lng.toFixed(5)}`;
+      panel.classList.remove('hidden');
+      panelStatus.textContent = 'Loading chargers...';
+      chargerEditor.classList.add('hidden');
+      chargerStatus.textContent = '';
+      chargerIcons.innerHTML = '';
+      try {
+        activeStationRecord = await getOrCreateStation(station);
+        activeChargers = await fetchChargers(activeStationRecord.id);
+        renderChargerIcons(station.totalChargers);
+        panelStatus.textContent = '';
+      } catch (err) {
+        console.error(err);
+        panelStatus.textContent = 'Failed to load chargers.';
+      }
+    }
+
+    async function getOrCreateStation(station) {
+      const cacheKey = `${station.name}-${station.lat}-${station.lng}`;
+      if (stationCache.has(cacheKey)) return stationCache.get(cacheKey);
+      const { data: existing, error: fetchError } = await supabaseClient
+        .from('stations')
+        .select('*')
+        .eq('name', station.name)
+        .eq('lat', station.lat)
+        .eq('lng', station.lng)
+        .limit(1)
+        .maybeSingle();
+      if (fetchError) throw fetchError;
+      if (existing) {
+        stationCache.set(cacheKey, existing);
+        return existing;
+      }
+      const { data: inserted, error: insertError } = await supabaseClient
+        .from('stations')
+        .insert({
+          name: station.name,
+          lat: station.lat,
+          lng: station.lng
+        })
+        .select()
+        .single();
+      if (insertError) throw insertError;
+      stationCache.set(cacheKey, inserted);
+      return inserted;
+    }
+
+    async function fetchChargers(stationId) {
+      const { data, error } = await supabaseClient
+        .from('chargers')
+        .select('*')
+        .eq('station_id', stationId)
+        .order('charger_index', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    }
+
+    function renderChargerIcons(totalChargers) {
+      chargerIcons.innerHTML = '';
+      for (let i = 1; i <= totalChargers; i += 1) {
+        const chargerData = activeChargers.find(item => item.charger_index === i);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'charger-button';
+        if (activeChargerIndex === i) button.classList.add('active');
+        const hasDetails = chargerData && hasChargerDetails(chargerData);
+        button.innerHTML = `
+          <span class="charger-icon">🔌</span>
+          <span>Charger ${i}</span>
+          ${hasDetails ? '<span class="badge">Saved</span>' : ''}
+        `;
+        button.addEventListener('click', () => openChargerEditor(i));
+        chargerIcons.appendChild(button);
+      }
+    }
+
+    function openChargerEditor(index) {
+      activeChargerIndex = index;
+      const chargerData = activeChargers.find(item => item.charger_index === index) || null;
+      chargerTitle.textContent = `Charger ${index} details`;
+      vendorInput.value = chargerData?.vendor || '';
+      serialInput.value = chargerData?.serial_number || '';
+      modelInput.value = chargerData?.model_number || '';
+      macInput.value = chargerData?.mac_address || '';
+      activeImages = Array.isArray(chargerData?.images) ? chargerData.images : [];
+      renderImageList();
+      chargerStatus.textContent = '';
+      chargerEditor.classList.remove('hidden');
+      renderChargerIcons(activeStation.totalChargers);
+    }
+
+    function renderImageList() {
+      imageList.innerHTML = '';
+      if (!activeImages || activeImages.length === 0) return;
+      activeImages.forEach((url, index) => {
+        const item = document.createElement('div');
+        item.className = 'image-item';
+        const link = document.createElement('a');
+        link.href = url;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = `Charger image ${index + 1}`;
+        link.appendChild(img);
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = 'Remove';
+        remove.addEventListener('click', () => {
+          activeImages = activeImages.filter((_, i) => i !== index);
+          renderImageList();
+        });
+        item.appendChild(link);
+        item.appendChild(remove);
+        imageList.appendChild(item);
+      });
+    }
+
+    function updateLocalCharger(updated) {
+      const index = activeChargers.findIndex(item => item.charger_index === updated.charger_index);
+      if (index >= 0) {
+        activeChargers[index] = updated;
+      } else {
+        activeChargers.push(updated);
+      }
+    }
+
+    function hasChargerDetails(chargerData) {
+      return Boolean(
+        chargerData.vendor ||
+        chargerData.serial_number ||
+        chargerData.model_number ||
+        chargerData.mac_address ||
+        (Array.isArray(chargerData.images) && chargerData.images.length > 0)
+      );
+    }
+
+    async function uploadImages(stationId, chargerIndex, files) {
+      const uploads = [];
+      for (const file of files) {
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const path = `${stationId}/charger-${chargerIndex}/${Date.now()}-${safeName}`;
+        const { error } = await supabaseClient
+          .storage
+          .from('charger-image')
+          .upload(path, file, { upsert: true });
+        if (error) throw error;
+        const { data } = supabaseClient
+          .storage
+          .from('charger-image')
+          .getPublicUrl(path);
+        if (data?.publicUrl) uploads.push(data.publicUrl);
+      }
+      return uploads;
+    }
+
+    function cleanValue(value) {
+      const trimmed = value.trim();
+      return trimmed.length === 0 ? null : trimmed;
     }
   </script>
   <script>
