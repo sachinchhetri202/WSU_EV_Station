@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS stations (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Ensure total_chargers exists for older installs
+ALTER TABLE stations
+  ADD COLUMN IF NOT EXISTS total_chargers INTEGER NOT NULL DEFAULT 1;
+
 -- Create chargers table
 CREATE TABLE IF NOT EXISTS chargers (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -43,6 +47,97 @@ CREATE TABLE IF NOT EXISTS chargers (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(station_id, charger_index)
 );
+
+-- Normalize station locations to 6 decimals for dedupe + uniqueness
+ALTER TABLE stations
+  ADD COLUMN IF NOT EXISTS lat_6 NUMERIC GENERATED ALWAYS AS (round(lat::numeric, 6)) STORED;
+
+ALTER TABLE stations
+  ADD COLUMN IF NOT EXISTS lng_6 NUMERIC GENERATED ALWAYS AS (round(lng::numeric, 6)) STORED;
+
+-- Merge duplicate stations by location (keeps the oldest station)
+WITH ranked AS (
+  SELECT
+    id,
+    lat_6,
+    lng_6,
+    created_at,
+    FIRST_VALUE(id) OVER (
+      PARTITION BY lat_6, lng_6
+      ORDER BY created_at ASC
+    ) AS keep_id
+  FROM stations
+),
+dupes AS (
+  SELECT id, keep_id
+  FROM ranked
+  WHERE id <> keep_id
+),
+charger_rows AS (
+  SELECT
+    c.charger_index,
+    c.vendor,
+    c.serial_number,
+    c.model_number,
+    c.mac_address,
+    c.images,
+    c.created_at,
+    c.updated_at,
+    d.keep_id AS station_id
+  FROM chargers c
+  JOIN dupes d ON c.station_id = d.id
+)
+INSERT INTO chargers (
+  station_id,
+  charger_index,
+  vendor,
+  serial_number,
+  model_number,
+  mac_address,
+  images,
+  created_at,
+  updated_at
+)
+SELECT
+  station_id,
+  charger_index,
+  vendor,
+  serial_number,
+  model_number,
+  mac_address,
+  images,
+  created_at,
+  updated_at
+FROM charger_rows
+ON CONFLICT (station_id, charger_index) DO UPDATE SET
+  vendor = COALESCE(EXCLUDED.vendor, chargers.vendor),
+  serial_number = COALESCE(EXCLUDED.serial_number, chargers.serial_number),
+  model_number = COALESCE(EXCLUDED.model_number, chargers.model_number),
+  mac_address = COALESCE(EXCLUDED.mac_address, chargers.mac_address),
+  images = CASE
+    WHEN COALESCE(array_length(EXCLUDED.images, 1), 0) > 0 THEN EXCLUDED.images
+    ELSE chargers.images
+  END,
+  updated_at = NOW();
+
+-- Delete duplicate stations (charger rows will cascade)
+WITH ranked AS (
+  SELECT
+    id,
+    lat_6,
+    lng_6,
+    ROW_NUMBER() OVER (
+      PARTITION BY lat_6, lng_6
+      ORDER BY created_at ASC
+    ) AS rn
+  FROM stations
+)
+DELETE FROM stations
+WHERE id IN (SELECT id FROM ranked WHERE rn > 1);
+
+-- Enforce uniqueness for station locations
+CREATE UNIQUE INDEX IF NOT EXISTS unique_station_location
+  ON stations(lat_6, lng_6);
 
 -- Enable Row Level Security
 ALTER TABLE stations ENABLE ROW LEVEL SECURITY;

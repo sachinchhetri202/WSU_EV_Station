@@ -337,6 +337,74 @@
       align-items: center;
       justify-content: flex-end;
     }
+
+    @media (max-width: 900px) {
+      #map { height: 45vh; }
+      .panel {
+        top: auto;
+        bottom: 0;
+        width: 100%;
+        height: 55vh;
+        max-width: 100%;
+        border-left: none;
+        border-top: 1px solid #e2e8f0;
+      }
+      .panel-header {
+        padding: 12px 14px;
+      }
+      .panel-header h2 {
+        font-size: 16px;
+      }
+      .panel-header button {
+        padding: 8px 12px;
+        font-size: 13px;
+      }
+      .panel-body {
+        padding: 12px;
+        gap: 12px;
+      }
+      .charger-icons {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .charger-button {
+        padding: 12px 6px;
+        font-size: 12px;
+      }
+      .station-list-items {
+        max-height: 160px;
+      }
+      .form-grid input {
+        padding: 10px 12px;
+        font-size: 14px;
+      }
+      .primary-button,
+      .danger-button,
+      .secondary-button {
+        padding: 12px 14px;
+        font-size: 14px;
+      }
+    }
+
+    @media (max-width: 600px) {
+      #map { height: 40vh; }
+      .panel {
+        height: 60vh;
+      }
+      .panel-header-actions {
+        gap: 6px;
+      }
+      .charger-icons {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .station-list-item {
+        grid-template-columns: 20px 1fr;
+        row-gap: 6px;
+      }
+      .station-list-item button {
+        grid-column: 2;
+        justify-self: end;
+      }
+    }
   </style>
 </head>
 <body>
@@ -595,6 +663,9 @@
         activeStation.totalChargers = nextTotal;
         stationMeta.textContent = `${nextTotal} charger(s) • ${activeStation.lat.toFixed(5)}, ${activeStation.lng.toFixed(5)}`;
         removeChargerButton.disabled = nextTotal <= 1;
+        if (activeStationRecord?.id) {
+          activeChargers = await fetchChargers(activeStationRecord.id);
+        }
         renderChargerIcons(nextTotal);
         panelStatus.textContent = 'Charger added.';
         refreshStationList({ updateMap: false });
@@ -611,8 +682,13 @@
       if (!confirmed) return;
       panelStatus.textContent = 'Removing charger...';
       try {
+        const removedIndex = activeStation.totalChargers;
         const nextTotal = normalizeTotalChargers(activeStation.totalChargers - 1);
         await updateStationTotal(activeStation, nextTotal);
+        if (activeStationRecord?.id) {
+          await removeChargerRecord(activeStationRecord.id, removedIndex);
+          activeChargers = await fetchChargers(activeStationRecord.id);
+        }
         activeStation.totalChargers = nextTotal;
         stationMeta.textContent = `${nextTotal} charger(s) • ${activeStation.lat.toFixed(5)}, ${activeStation.lng.toFixed(5)}`;
         removeChargerButton.disabled = nextTotal <= 1;
@@ -737,14 +813,18 @@
       if (dbStations.length === 0) return seedStations;
 
       const seedLookup = new Map(
-        seedStations.map(item => [stationKeyFromFields(item.name, item.lat, item.lng), item])
+        seedStations.map(item => [stationLocationKey(item.lat, item.lng), item])
       );
       if (dbHasTotals && seedStations.length > 0) {
         dbStations = await syncTotalsFromSeed(dbStations, seedLookup);
       }
       return dbStations.map(item => {
-        const seed = seedLookup.get(stationKeyFromFields(item.name, item.lat, item.lng));
-        return normalizeStationRecord(item, seed?.totalChargers);
+        const seed = seedLookup.get(stationLocationKey(item.lat, item.lng));
+        const normalized = normalizeStationRecord(item, seed?.totalChargers);
+        if (seed?.name) {
+          normalized.name = seed.name;
+        }
+        return normalized;
       });
     }
 
@@ -852,18 +932,24 @@
       if (station.id) return station;
       const cacheKey = stationKey(station);
       if (stationCache.has(cacheKey)) return stationCache.get(cacheKey);
-      const { data: existing, error: fetchError } = await supabaseClient
+      const epsilon = 0.00001;
+      const latMin = station.lat - epsilon;
+      const latMax = station.lat + epsilon;
+      const lngMin = station.lng - epsilon;
+      const lngMax = station.lng + epsilon;
+      const { data: existingByLocation, error: locationError } = await supabaseClient
         .from('stations')
         .select('*')
-        .eq('name', station.name)
-        .eq('lat', station.lat)
-        .eq('lng', station.lng)
+        .gte('lat', latMin)
+        .lte('lat', latMax)
+        .gte('lng', lngMin)
+        .lte('lng', lngMax)
         .limit(1)
         .maybeSingle();
-      if (fetchError) throw fetchError;
-      if (existing) {
-        stationCache.set(cacheKey, existing);
-        return existing;
+      if (locationError) throw locationError;
+      if (existingByLocation) {
+        stationCache.set(cacheKey, existingByLocation);
+        return existingByLocation;
       }
       const inserted = await insertStationRecord(station);
       stationCache.set(cacheKey, inserted);
@@ -877,8 +963,49 @@
       return `${safeName}::${safeLat}::${safeLng}`;
     }
 
+    function stationLocationKey(lat, lng) {
+      const safeLat = Number(lat).toFixed(6);
+      const safeLng = Number(lng).toFixed(6);
+      return `${safeLat}::${safeLng}`;
+    }
+
     function stationKey(station) {
       return station.id || stationKeyFromFields(station.name, station.lat, station.lng);
+    }
+
+    const LOCAL_TOTALS_KEY = 'hostevmap.stationTotals';
+
+    function readLocalTotals() {
+      try {
+        const raw = window.localStorage.getItem(LOCAL_TOTALS_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch (err) {
+        return {};
+      }
+    }
+
+    function writeLocalTotals(totals) {
+      try {
+        window.localStorage.setItem(LOCAL_TOTALS_KEY, JSON.stringify(totals));
+      } catch (err) {
+        // ignore storage failures (private mode, disabled, etc.)
+      }
+    }
+
+    function getLocalStationTotal(station) {
+      const totals = readLocalTotals();
+      const key = stationLocationKey(station.lat, station.lng);
+      const value = totals[key];
+      return Number.isFinite(value) ? value : null;
+    }
+
+    function setLocalStationTotal(station, total) {
+      const totals = readLocalTotals();
+      const key = stationLocationKey(station.lat, station.lng);
+      totals[key] = total;
+      writeLocalTotals(totals);
     }
 
     function normalizeTotalChargers(value) {
@@ -888,13 +1015,14 @@
     }
 
     function normalizeStationRecord(record, fallbackTotal) {
+      const localTotal = record ? getLocalStationTotal(record) : null;
       return {
         id: record?.id || null,
         name: record?.name,
         lat: record?.lat,
         lng: record?.lng,
         totalChargers: normalizeTotalChargers(
-          record?.total_chargers ?? record?.totalChargers ?? fallbackTotal ?? 1
+          record?.total_chargers ?? record?.totalChargers ?? localTotal ?? fallbackTotal ?? 1
         )
       };
     }
@@ -903,7 +1031,7 @@
       if (!Array.isArray(stations)) return [];
       const byKey = new Map();
       stations.forEach(station => {
-        const key = stationKeyFromFields(station.name, station.lat, station.lng);
+        const key = stationLocationKey(station.lat, station.lng);
         if (!byKey.has(key)) {
           byKey.set(key, station);
           return;
@@ -929,11 +1057,11 @@
     async function syncTotalsFromSeed(dbStations, seedLookup) {
       const updates = [];
       const normalized = dbStations.map(item => {
-        const seed = seedLookup.get(stationKeyFromFields(item.name, item.lat, item.lng));
+        const seed = seedLookup.get(stationLocationKey(item.lat, item.lng));
         if (!seed) return item;
         const seedTotal = normalizeTotalChargers(seed.totalChargers);
         const currentTotal = item.total_chargers ?? item.totalChargers;
-        if ((currentTotal === null || currentTotal === 1) && seedTotal !== 1) {
+        if ((currentTotal === null || currentTotal === undefined) && seedTotal !== 1) {
           updates.push({ id: item.id, total_chargers: seedTotal });
           return { ...item, total_chargers: seedTotal };
         }
@@ -1122,9 +1250,11 @@
         .select()
         .single();
       if (error && isMissingTotalsColumn(error)) {
+        setLocalStationTotal(record, nextTotal);
         return { ...record, total_chargers: nextTotal };
       }
       if (error) throw error;
+      setLocalStationTotal(record, nextTotal);
       stationCache.set(stationKey(record), data);
       return data;
     }
@@ -1137,6 +1267,15 @@
         .order('charger_index', { ascending: true });
       if (error) throw error;
       return data || [];
+    }
+
+    async function removeChargerRecord(stationId, chargerIndex) {
+      const { error } = await supabaseClient
+        .from('chargers')
+        .delete()
+        .eq('station_id', stationId)
+        .eq('charger_index', chargerIndex);
+      if (error) throw error;
     }
 
     function renderChargerIcons(totalChargers) {
@@ -1166,7 +1305,7 @@
       serialInput.value = chargerData?.serial_number || '';
       modelInput.value = chargerData?.model_number || '';
       macInput.value = chargerData?.mac_address || '';
-      activeImages = Array.isArray(chargerData?.images) ? chargerData.images : [];
+      activeImages = normalizeImages(chargerData?.images);
       renderImageList();
       chargerStatus.textContent = '';
       chargerEditor.classList.remove('hidden');
@@ -1203,19 +1342,26 @@
     function updateLocalCharger(updated) {
       const index = activeChargers.findIndex(item => item.charger_index === updated.charger_index);
       if (index >= 0) {
-        activeChargers[index] = updated;
+        activeChargers[index] = {
+          ...updated,
+          images: normalizeImages(updated.images)
+        };
       } else {
-        activeChargers.push(updated);
+        activeChargers.push({
+          ...updated,
+          images: normalizeImages(updated.images)
+        });
       }
     }
 
     function hasChargerDetails(chargerData) {
+      const images = normalizeImages(chargerData?.images);
       return Boolean(
         chargerData.vendor ||
         chargerData.serial_number ||
         chargerData.model_number ||
         chargerData.mac_address ||
-        (Array.isArray(chargerData.images) && chargerData.images.length > 0)
+        images.length > 0
       );
     }
 
@@ -1236,6 +1382,32 @@
         if (data?.publicUrl) uploads.push(data.publicUrl);
       }
       return uploads;
+    }
+
+    function normalizeImages(value) {
+      if (Array.isArray(value)) {
+        return value.filter(Boolean);
+      }
+      if (typeof value !== 'string') return [];
+      const trimmed = value.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(Boolean);
+        }
+      } catch (err) {
+        // fall through to Postgres array parsing
+      }
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        const inner = trimmed.slice(1, -1);
+        if (!inner) return [];
+        return inner
+          .split(',')
+          .map(item => item.trim().replace(/^"(.*)"$/, '$1'))
+          .filter(Boolean);
+      }
+      return [trimmed];
     }
 
     function cleanValue(value) {
