@@ -23,7 +23,6 @@
 
 2. Edit `.env` and add your keys:
    ```
-   MAPS_API_KEY=your_google_maps_key
    SUPABASE_URL=https://xxxxx.supabase.co
    SUPABASE_ANON_KEY=eyJhbGc...
    SUPABASE_SERVICE_KEY=eyJhbGc... (secret!)
@@ -73,7 +72,6 @@ Open http://localhost:3000
    - Add environment variables (same as `.env` but without `SUPABASE_SERVICE_KEY`)
 
 3. Go to **Site settings** → **Environment variables** → Add:
-   - `MAPS_API_KEY`
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_KEY`
@@ -82,12 +80,6 @@ Open http://localhost:3000
 4. Deploy!
 
 ### 6. Secure Your API Keys
-
-**Google Maps:**
-1. [Google Cloud Console](https://console.cloud.google.com/) → Credentials
-2. Edit your Maps key → HTTP referrers → Add:
-   - `https://your-site.netlify.app/*`
-   - `https://*.netlify.app/*`
 
 **Supabase:**
 - Already secured with Row Level Security (RLS)

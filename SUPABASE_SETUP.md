@@ -54,7 +54,6 @@ After deploying to Netlify:
 1. Go to your Netlify site dashboard
 2. Click **Site settings** → **Environment variables**
 3. Add these variables:
-   - `MAPS_API_KEY` = your Google Maps API key
    - `SUPABASE_URL` = from step 3
    - `SUPABASE_ANON_KEY` = from step 3
 

@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EV Charger Map</title>
   <link rel="icon" type="image/png" href="assets/icon/logo.png">
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  >
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; }
@@ -337,6 +343,40 @@
       align-items: center;
       justify-content: flex-end;
     }
+    .leaflet-container {
+      font: inherit;
+      background: #dbe6f2;
+    }
+    .leaflet-control-zoom a {
+      border-radius: 8px;
+    }
+    .leaflet-popup-content-wrapper {
+      border-radius: 12px;
+      box-shadow: 0 14px 32px rgba(15, 23, 42, 0.2);
+    }
+    .leaflet-popup-content {
+      margin: 12px 14px;
+    }
+    .map-popup {
+      min-width: 180px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .map-popup strong {
+      color: #0f172a;
+      font-size: 14px;
+      line-height: 1.3;
+    }
+    .map-popup .popup-meta {
+      color: #475569;
+      font-size: 12px;
+    }
+    .map-popup .popup-coords {
+      color: #64748b;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
 
     @media (max-width: 900px) {
       #map { height: 45vh; }
@@ -492,7 +532,6 @@
   </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    const API_KEY = '__MAPS_API_KEY__';
     const SUPABASE_URL = '__SUPABASE_URL__';
     const SUPABASE_ANON_KEY = '__SUPABASE_ANON_KEY__';
 
@@ -537,7 +576,6 @@
     let activeChargerIndex = null;
     let activeImages = [];
     let mapInstance = null;
-    let infoWindow = null;
     removeChargerButton.disabled = true;
     let lastLoadedStations = [];
     let defaultMarkerIcon = null;
@@ -755,13 +793,15 @@
     });
 
     function initMap() {
-      const center = { lat: 41.19, lng: -111.94 };
-      mapInstance = new google.maps.Map(document.getElementById('map'), {
-        zoom: 13,
-        center: center
-      });
-
-      infoWindow = new google.maps.InfoWindow();
+      const center = [41.19, -111.94];
+      mapInstance = L.map('map', {
+        zoomControl: true,
+        minZoom: 3
+      }).setView(center, 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(mapInstance);
       ensureMarkerIcons();
 
       loadStations()
@@ -852,27 +892,35 @@
     function renderStations(stations, options = {}) {
       const uniqueStations = dedupeStations(stations);
       const { fitBounds = true, focusActive = false } = options;
-      markersByKey.forEach(marker => marker.setMap(null));
+      markersByKey.forEach(marker => marker.remove());
       markersByKey.clear();
       if (!mapInstance) return;
       if (!uniqueStations || uniqueStations.length === 0) return;
-      const bounds = new google.maps.LatLngBounds();
+      const bounds = L.latLngBounds([]);
       uniqueStations.forEach(station => {
         addStationToMap(station);
-        bounds.extend({ lat: station.lat, lng: station.lng });
+        bounds.extend([station.lat, station.lng]);
       });
-      if (fitBounds) {
-        mapInstance.fitBounds(bounds);
+      if (fitBounds && bounds.isValid()) {
+        mapInstance.fitBounds(bounds, {
+          padding: [36, 36],
+          maxZoom: 16
+        });
       }
       if (focusActive && activeStation) {
         const activeMarker = markersByKey.get(stationKey(activeStation));
-        if (activeMarker) {
-          infoWindow.setContent(
-            `<strong>${activeStation.name}</strong><br>${activeStation.totalChargers} charger(s)`
-          );
-          infoWindow.open(mapInstance, activeMarker);
-        }
+        if (activeMarker) activeMarker.openPopup();
       }
+    }
+
+    function stationPopupContent(station) {
+      return `
+        <div class="map-popup">
+          <strong>${station.name}</strong>
+          <div class="popup-meta">${station.totalChargers} charger(s)</div>
+          <div class="popup-coords">${station.lat.toFixed(5)}, ${station.lng.toFixed(5)}</div>
+        </div>
+      `;
     }
 
     function addStationToMap(station) {
@@ -880,17 +928,13 @@
       ensureMarkerIcons();
       const key = stationKey(station);
       if (markersByKey.has(key)) return;
-      const marker = new google.maps.Marker({
-        position: { lat: station.lat, lng: station.lng },
-        map: mapInstance,
+      const marker = L.marker([station.lat, station.lng], {
         title: station.name,
         icon: defaultMarkerIcon
-      });
-      marker.addListener('click', () => {
-        infoWindow.setContent(
-          `<strong>${station.name}</strong><br>${station.totalChargers} charger(s)`
-        );
-        infoWindow.open(mapInstance, marker);
+      })
+        .bindPopup(stationPopupContent(station))
+        .addTo(mapInstance);
+      marker.on('click', () => {
         openStationPanel(station);
         focusStationMarker(station);
       });
@@ -900,7 +944,7 @@
     function removeStationFromMap(station) {
       const key = stationKey(station);
       const marker = markersByKey.get(key);
-      if (marker) marker.setMap(null);
+      if (marker) marker.remove();
       markersByKey.delete(key);
       stationCache.delete(key);
     }
@@ -1118,16 +1162,18 @@
 
     function ensureMarkerIcons() {
       if (defaultMarkerIcon && selectedMarkerIcon) return;
-      defaultMarkerIcon = {
-        url: 'assets/icon/pin.png',
-        scaledSize: new google.maps.Size(36, 36),
-        anchor: new google.maps.Point(18, 36)
-      };
-      selectedMarkerIcon = {
-        url: 'assets/icon/station.png',
-        scaledSize: new google.maps.Size(44, 44),
-        anchor: new google.maps.Point(22, 44)
-      };
+      defaultMarkerIcon = L.icon({
+        iconUrl: 'assets/icon/pin.png',
+        iconSize: [36, 36],
+        iconAnchor: [18, 36],
+        popupAnchor: [0, -30]
+      });
+      selectedMarkerIcon = L.icon({
+        iconUrl: 'assets/icon/station.png',
+        iconSize: [44, 44],
+        iconAnchor: [22, 44],
+        popupAnchor: [0, -36]
+      });
     }
 
     function focusStationMarker(station) {
@@ -1137,9 +1183,10 @@
       markersByKey.forEach((marker, key) => {
         const isActive = key === stationKey(station);
         marker.setIcon(isActive ? selectedMarkerIcon : defaultMarkerIcon);
-        marker.setZIndex(isActive ? 1000 : undefined);
+        marker.setZIndexOffset(isActive ? 1000 : 0);
+        if (isActive) marker.openPopup();
       });
-      mapInstance.panTo({ lat: station.lat, lng: station.lng });
+      mapInstance.panTo([station.lat, station.lng]);
       mapInstance.setZoom(16);
     }
 
@@ -1148,9 +1195,9 @@
       ensureMarkerIcons();
       markersByKey.forEach(marker => {
         marker.setIcon(defaultMarkerIcon);
-        marker.setZIndex(undefined);
+        marker.setZIndexOffset(0);
+        marker.closePopup();
       });
-      if (infoWindow) infoWindow.close();
     }
 
     async function refreshStationList(options = {}) {
@@ -1415,12 +1462,13 @@
       return trimmed.length === 0 ? null : trimmed;
     }
   </script>
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
   <script>
-    const s = document.createElement('script');
-    s.async = true;
-    s.defer = true;
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&callback=initMap`;
-    document.head.appendChild(s);
+    document.addEventListener('DOMContentLoaded', initMap);
   </script>
 </body>
 </html>

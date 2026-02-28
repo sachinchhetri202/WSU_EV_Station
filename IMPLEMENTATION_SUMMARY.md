@@ -5,7 +5,7 @@
 A complete EV Charger Map web application with:
 
 ### Public Features
-- **Interactive Google Map** showing all charging station locations
+- **Interactive Leaflet map with OpenStreetMap tiles** showing all charging station locations
 - **Two-level navigation**: Click station → view charger list → click charger → see full details
 - **Charger details display**:
   - Vendor name
@@ -111,7 +111,6 @@ README.md                # Updated documentation
 ## Environment Variables Required
 
 **For Netlify (production):**
-- `MAPS_API_KEY` - Google Maps API key
 - `SUPABASE_URL` - Supabase project URL
 - `SUPABASE_ANON_KEY` - Public key for frontend
 - `SUPABASE_SERVICE_KEY` - Secret key for backend functions
@@ -127,7 +126,6 @@ Same as above, in `.env` file
 - Supabase service key only in backend functions (not exposed to browser)
 - Row Level Security (RLS) on database tables
 - Storage bucket has public read, but write requires service key
-- Google Maps API key restricted by HTTP referrer
 
 ✅ **Safe to commit:**
 - `.env.example` (no real keys)
@@ -143,7 +141,6 @@ Same as above, in `.env` file
 All free tier:
 - **Supabase**: 500MB database, 1GB storage (free tier)
 - **Netlify**: 100GB bandwidth, 300 build minutes/month (free tier)
-- **Google Maps**: $200 free credit/month
 
 Expected costs for this project: **$0/month** (within free tiers)
 
