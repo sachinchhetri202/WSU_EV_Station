@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EV Charger Map</title>
   <link rel="icon" type="image/png" href="assets/icon/logo.png">
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  >
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; }
@@ -17,10 +23,11 @@
       width: 380px;
       max-width: 90vw;
       height: 100vh;
-      background: #f6f7fb;
+      background: rgba(246, 247, 251, 0.96);
+      backdrop-filter: blur(8px);
       border-left: 1px solid #e2e8f0;
       box-shadow: -10px 0 30px rgba(15, 23, 42, 0.12);
-      z-index: 5;
+      z-index: 1200;
       display: flex;
       flex-direction: column;
     }
@@ -337,6 +344,58 @@
       align-items: center;
       justify-content: flex-end;
     }
+    .leaflet-container {
+      font: inherit;
+      background: #dbe6f2;
+    }
+    .leaflet-control-zoom a {
+      border-radius: 8px;
+    }
+    .leaflet-popup-content-wrapper {
+      border-radius: 12px;
+      box-shadow: 0 14px 32px rgba(15, 23, 42, 0.2);
+    }
+    .leaflet-popup-content {
+      margin: 12px 14px;
+    }
+    .map-popup {
+      min-width: 180px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .map-popup strong {
+      color: #0f172a;
+      font-size: 14px;
+      line-height: 1.3;
+    }
+    .map-popup .popup-meta {
+      color: #475569;
+      font-size: 12px;
+    }
+    .map-popup .popup-coords {
+      color: #64748b;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+    .map-reset-campus {
+      border: 1px solid #d5dbe5;
+      background: #ffffff;
+      color: #1f2937;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+      cursor: pointer;
+    }
+    .map-reset-campus:hover {
+      background: #f8fafc;
+    }
+    .map-reset-campus:focus-visible {
+      outline: 2px solid #3b82f6;
+      outline-offset: 2px;
+    }
 
     @media (max-width: 900px) {
       #map { height: 45vh; }
@@ -492,7 +551,6 @@
   </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    const API_KEY = '__MAPS_API_KEY__';
     const SUPABASE_URL = '__SUPABASE_URL__';
     const SUPABASE_ANON_KEY = '__SUPABASE_ANON_KEY__';
 
@@ -537,11 +595,16 @@
     let activeChargerIndex = null;
     let activeImages = [];
     let mapInstance = null;
-    let infoWindow = null;
     removeChargerButton.disabled = true;
     let lastLoadedStations = [];
     let defaultMarkerIcon = null;
     let selectedMarkerIcon = null;
+    const MAIN_CAMPUS_CENTER = [41.1928, -111.9432];
+    const MAIN_CAMPUS_ZOOM = 15;
+    const STATION_FOCUS_ZOOM = 16;
+    const STATION_FOCUS_DURATION = 0.85;
+    const CAMPUS_RESET_DURATION = 0.8;
+    let pendingFocusOffsetHandler = null;
 
     panelClose.addEventListener('click', () => {
       panel.classList.add('hidden');
@@ -661,7 +724,7 @@
         const nextTotal = normalizeTotalChargers(activeStation.totalChargers + 1);
         await updateStationTotal(activeStation, nextTotal);
         activeStation.totalChargers = nextTotal;
-        stationMeta.textContent = `${nextTotal} charger(s) • ${activeStation.lat.toFixed(5)}, ${activeStation.lng.toFixed(5)}`;
+        stationMeta.textContent = formatStationMeta(activeStation);
         removeChargerButton.disabled = nextTotal <= 1;
         if (activeStationRecord?.id) {
           activeChargers = await fetchChargers(activeStationRecord.id);
@@ -690,7 +753,7 @@
           activeChargers = await fetchChargers(activeStationRecord.id);
         }
         activeStation.totalChargers = nextTotal;
-        stationMeta.textContent = `${nextTotal} charger(s) • ${activeStation.lat.toFixed(5)}, ${activeStation.lng.toFixed(5)}`;
+        stationMeta.textContent = formatStationMeta(activeStation);
         removeChargerButton.disabled = nextTotal <= 1;
         if (activeChargerIndex && activeChargerIndex > nextTotal) {
           activeChargerIndex = null;
@@ -755,19 +818,22 @@
     });
 
     function initMap() {
-      const center = { lat: 41.19, lng: -111.94 };
-      mapInstance = new google.maps.Map(document.getElementById('map'), {
-        zoom: 13,
-        center: center
-      });
-
-      infoWindow = new google.maps.InfoWindow();
+      const center = MAIN_CAMPUS_CENTER;
+      mapInstance = L.map('map', {
+        zoomControl: true,
+        minZoom: 3
+      }).setView(center, MAIN_CAMPUS_ZOOM);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(mapInstance);
       ensureMarkerIcons();
+      addCampusResetControl();
 
       loadStations()
         .then(stations => {
           const uniqueStations = dedupeStations(stations);
-          renderStations(uniqueStations, { fitBounds: true });
+          renderStations(uniqueStations, { fitBounds: false });
           lastLoadedStations = uniqueStations;
           renderStationList(uniqueStations);
         })
@@ -852,27 +918,35 @@
     function renderStations(stations, options = {}) {
       const uniqueStations = dedupeStations(stations);
       const { fitBounds = true, focusActive = false } = options;
-      markersByKey.forEach(marker => marker.setMap(null));
+      markersByKey.forEach(marker => marker.remove());
       markersByKey.clear();
       if (!mapInstance) return;
       if (!uniqueStations || uniqueStations.length === 0) return;
-      const bounds = new google.maps.LatLngBounds();
+      const bounds = L.latLngBounds([]);
       uniqueStations.forEach(station => {
         addStationToMap(station);
-        bounds.extend({ lat: station.lat, lng: station.lng });
+        bounds.extend([station.lat, station.lng]);
       });
-      if (fitBounds) {
-        mapInstance.fitBounds(bounds);
+      if (fitBounds && bounds.isValid()) {
+        mapInstance.fitBounds(bounds, {
+          padding: [36, 36],
+          maxZoom: 16
+        });
       }
       if (focusActive && activeStation) {
         const activeMarker = markersByKey.get(stationKey(activeStation));
-        if (activeMarker) {
-          infoWindow.setContent(
-            `<strong>${activeStation.name}</strong><br>${activeStation.totalChargers} charger(s)`
-          );
-          infoWindow.open(mapInstance, activeMarker);
-        }
+        if (activeMarker) activeMarker.openPopup();
       }
+    }
+
+    function stationPopupContent(station) {
+      return `
+        <div class="map-popup">
+          <strong>${escapeHtml(station.name)}</strong>
+          <div class="popup-meta">${station.totalChargers} charger(s)</div>
+          <div class="popup-coords">${station.lat.toFixed(5)}, ${station.lng.toFixed(5)}</div>
+        </div>
+      `;
     }
 
     function addStationToMap(station) {
@@ -880,19 +954,14 @@
       ensureMarkerIcons();
       const key = stationKey(station);
       if (markersByKey.has(key)) return;
-      const marker = new google.maps.Marker({
-        position: { lat: station.lat, lng: station.lng },
-        map: mapInstance,
+      const marker = L.marker([station.lat, station.lng], {
         title: station.name,
         icon: defaultMarkerIcon
-      });
-      marker.addListener('click', () => {
-        infoWindow.setContent(
-          `<strong>${station.name}</strong><br>${station.totalChargers} charger(s)`
-        );
-        infoWindow.open(mapInstance, marker);
+      })
+        .bindPopup(stationPopupContent(station), { autoPan: false })
+        .addTo(mapInstance);
+      marker.on('click', () => {
         openStationPanel(station);
-        focusStationMarker(station);
       });
       markersByKey.set(key, marker);
     }
@@ -900,15 +969,21 @@
     function removeStationFromMap(station) {
       const key = stationKey(station);
       const marker = markersByKey.get(key);
-      if (marker) marker.setMap(null);
+      if (marker) marker.remove();
       markersByKey.delete(key);
       stationCache.delete(key);
     }
 
-    async function openStationPanel(station) {
+    async function openStationPanel(stationInput) {
+      const station = normalizeStationInput(resolveStation(stationInput));
+      if (!station) {
+        panel.classList.remove('hidden');
+        panelStatus.textContent = 'Unable to load station details for this marker.';
+        return;
+      }
       activeStation = station;
       stationTitle.textContent = station.name;
-      stationMeta.textContent = `${station.totalChargers} charger(s) • ${station.lat.toFixed(5)}, ${station.lng.toFixed(5)}`;
+      stationMeta.textContent = formatStationMeta(station);
       removeChargerButton.disabled = station.totalChargers <= 1;
       panel.classList.remove('hidden');
       panelStatus.textContent = 'Loading chargers...';
@@ -1015,12 +1090,16 @@
     }
 
     function normalizeStationRecord(record, fallbackTotal) {
+      const lat = Number(record?.lat);
+      const lng = Number(record?.lng);
+      const safeLat = Number.isFinite(lat) ? lat : null;
+      const safeLng = Number.isFinite(lng) ? lng : null;
       const localTotal = record ? getLocalStationTotal(record) : null;
       return {
         id: record?.id || null,
-        name: record?.name,
-        lat: record?.lat,
-        lng: record?.lng,
+        name: cleanStationName(record?.name),
+        lat: safeLat,
+        lng: safeLng,
         totalChargers: normalizeTotalChargers(
           record?.total_chargers ?? record?.totalChargers ?? localTotal ?? fallbackTotal ?? 1
         )
@@ -1031,6 +1110,9 @@
       if (!Array.isArray(stations)) return [];
       const byKey = new Map();
       stations.forEach(station => {
+        const normalized = normalizeStationInput(station);
+        if (!normalized) return;
+        station = normalized;
         const key = stationLocationKey(station.lat, station.lng);
         if (!byKey.has(key)) {
           byKey.set(key, station);
@@ -1118,39 +1200,69 @@
 
     function ensureMarkerIcons() {
       if (defaultMarkerIcon && selectedMarkerIcon) return;
-      defaultMarkerIcon = {
-        url: 'assets/icon/pin.png',
-        scaledSize: new google.maps.Size(36, 36),
-        anchor: new google.maps.Point(18, 36)
-      };
-      selectedMarkerIcon = {
-        url: 'assets/icon/station.png',
-        scaledSize: new google.maps.Size(44, 44),
-        anchor: new google.maps.Point(22, 44)
-      };
+      defaultMarkerIcon = L.icon({
+        iconUrl: 'assets/icon/pin.png',
+        iconSize: [36, 36],
+        iconAnchor: [18, 36],
+        popupAnchor: [0, -30]
+      });
+      selectedMarkerIcon = L.icon({
+        iconUrl: 'assets/icon/station.png',
+        iconSize: [44, 44],
+        iconAnchor: [22, 44],
+        popupAnchor: [0, -36]
+      });
     }
 
     function focusStationMarker(station) {
       if (!mapInstance) return;
       if (!station) return;
       ensureMarkerIcons();
+      let activeMarker = null;
       markersByKey.forEach((marker, key) => {
         const isActive = key === stationKey(station);
         marker.setIcon(isActive ? selectedMarkerIcon : defaultMarkerIcon);
-        marker.setZIndex(isActive ? 1000 : undefined);
+        marker.setZIndexOffset(isActive ? 1000 : 0);
+        if (isActive) activeMarker = marker;
       });
-      mapInstance.panTo({ lat: station.lat, lng: station.lng });
-      mapInstance.setZoom(16);
+      if (activeMarker) activeMarker.openPopup();
+      if (pendingFocusOffsetHandler) {
+        mapInstance.off('moveend', pendingFocusOffsetHandler);
+        pendingFocusOffsetHandler = null;
+      }
+      mapInstance.stop();
+      const targetZoom = Math.max(mapInstance.getZoom(), STATION_FOCUS_ZOOM);
+      mapInstance.flyTo([station.lat, station.lng], targetZoom, {
+        animate: true,
+        duration: STATION_FOCUS_DURATION,
+        easeLinearity: 0.25
+      });
+      const panelOffset = getVisiblePanelOffset();
+      if (panelOffset <= 0) return;
+      pendingFocusOffsetHandler = () => {
+        mapInstance.panBy([-panelOffset, 0], {
+          animate: true,
+          duration: 0.35,
+          easeLinearity: 0.25,
+          noMoveStart: true
+        });
+        pendingFocusOffsetHandler = null;
+      };
+      mapInstance.once('moveend', pendingFocusOffsetHandler);
     }
 
     function resetMarkerSelection() {
       if (!mapInstance) return;
+      if (pendingFocusOffsetHandler) {
+        mapInstance.off('moveend', pendingFocusOffsetHandler);
+        pendingFocusOffsetHandler = null;
+      }
       ensureMarkerIcons();
       markersByKey.forEach(marker => {
         marker.setIcon(defaultMarkerIcon);
-        marker.setZIndex(undefined);
+        marker.setZIndexOffset(0);
+        marker.closePopup();
       });
-      if (infoWindow) infoWindow.close();
     }
 
     async function refreshStationList(options = {}) {
@@ -1193,7 +1305,7 @@
         const name = document.createElement('strong');
         name.textContent = station.name;
         const meta = document.createElement('small');
-        meta.textContent = `${station.totalChargers} charger(s) • ${station.lat.toFixed(4)}, ${station.lng.toFixed(4)}`;
+        meta.textContent = formatStationMeta(station, 4);
         info.appendChild(name);
         info.appendChild(meta);
         info.addEventListener('click', () => openStationPanel(station));
@@ -1414,13 +1526,97 @@
       const trimmed = value.trim();
       return trimmed.length === 0 ? null : trimmed;
     }
+
+    function cleanStationName(value) {
+      const trimmed = typeof value === 'string' ? value.trim() : '';
+      return trimmed || 'Unnamed station';
+    }
+
+    function normalizeStationInput(station) {
+      if (!station) return null;
+      const lat = Number(station.lat);
+      const lng = Number(station.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      return {
+        ...station,
+        name: cleanStationName(station.name),
+        lat,
+        lng,
+        totalChargers: normalizeTotalChargers(station.totalChargers ?? station.total_chargers)
+      };
+    }
+
+    function resolveStation(stationInput) {
+      if (!stationInput) return null;
+      if (stationInput.id) {
+        const byId = lastLoadedStations.find(item => item.id === stationInput.id);
+        if (byId) return byId;
+      }
+      const key = stationLocationKey(stationInput.lat, stationInput.lng);
+      return lastLoadedStations.find(item => stationLocationKey(item.lat, item.lng) === key) || stationInput;
+    }
+
+    function formatStationMeta(station, precision = 5) {
+      if (!station) return 'Station details unavailable';
+      const lat = Number(station.lat);
+      const lng = Number(station.lng);
+      const chargers = normalizeTotalChargers(station.totalChargers ?? station.total_chargers);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return `${chargers} charger(s)`;
+      }
+      return `${chargers} charger(s) • ${lat.toFixed(precision)}, ${lng.toFixed(precision)}`;
+    }
+
+    function getVisiblePanelOffset() {
+      if (panel.classList.contains('hidden')) return 0;
+      if (window.matchMedia('(max-width: 900px)').matches) return 0;
+      const panelWidth = panel.getBoundingClientRect().width;
+      if (!Number.isFinite(panelWidth) || panelWidth <= 0) return 0;
+      return Math.round(panelWidth / 2);
+    }
+
+    function addCampusResetControl() {
+      if (!mapInstance) return;
+      const CampusResetControl = L.Control.extend({
+        options: { position: 'topleft' },
+        onAdd() {
+          const button = L.DomUtil.create('button', 'map-reset-campus');
+          button.type = 'button';
+          button.textContent = 'Reset to Campus';
+          button.title = 'Reset map view to main campus';
+          L.DomEvent.disableClickPropagation(button);
+          L.DomEvent.on(button, 'click', event => {
+            L.DomEvent.stop(event);
+            if (!mapInstance) return;
+            mapInstance.stop();
+            mapInstance.flyTo(MAIN_CAMPUS_CENTER, MAIN_CAMPUS_ZOOM, {
+              animate: true,
+              duration: CAMPUS_RESET_DURATION,
+              easeLinearity: 0.25
+            });
+          });
+          return button;
+        }
+      });
+      mapInstance.addControl(new CampusResetControl());
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
   </script>
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
   <script>
-    const s = document.createElement('script');
-    s.async = true;
-    s.defer = true;
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&callback=initMap`;
-    document.head.appendChild(s);
+    document.addEventListener('DOMContentLoaded', initMap);
   </script>
 </body>
 </html>
