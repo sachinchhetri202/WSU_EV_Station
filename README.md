@@ -13,6 +13,14 @@ npm start
 
 Open http://localhost:3000
 
+## Refresh `station.json` From Supabase
+
+```bash
+npm run sync:station-json
+```
+
+This command updates only `src/station.json` from the `stations` table and creates a timestamped backup before replacing the file.
+
 ## Deploy to Netlify
 
 1. Push to GitHub (or use Netlify Drop).

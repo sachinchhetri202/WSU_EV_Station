@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "sync:station-json": "node sync-station-json.js",
     "build": "node build.js",
     "start": "npx serve dist -l 3000"
   }
