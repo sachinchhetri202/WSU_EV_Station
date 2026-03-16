@@ -4,8 +4,8 @@ const path = require('path');
 // Load .env for local development
 const envPath = path.join(__dirname, '.env');
 if (fs.existsSync(envPath)) {
-  fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
-    const m = line.match(/^([^#=]+)=(.*)$/);
+  fs.readFileSync(envPath, 'utf8').split(/\r?\n/).forEach(line => {
+    const m = line.match(/^([^#=\s]+)\s*=\s*(.*)$/);
     if (m) process.env[m[1].trim()] = m[2].trim();
   });
 }

@@ -18,6 +18,12 @@
     "totalChargers": 4
   },
   {
+    "name": "A5",
+    "lat": 41.195236,
+    "lng": -111.94374,
+    "totalChargers": 2
+  },
+  {
     "name": "A6",
     "lat": 41.1926945712261,
     "lng": -111.941128408731,
@@ -46,6 +52,12 @@
     "lat": 41.0991724,
     "lng": -111.9830455,
     "totalChargers": 1
+  },
+  {
+    "name": "Dee Event Center",
+    "lat": 41.183052,
+    "lng": -111.944883,
+    "totalChargers": 2
   },
   {
     "name": "Fleet Only",
